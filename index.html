@@ -50,7 +50,6 @@
       --bg-pattern: none;
     }
 
-    /* Light theme background pattern */
     body::before {
       content: '';
       position: fixed;
@@ -63,13 +62,13 @@
       z-index: 0;
       opacity: 1;
       transition: opacity 0.3s ease;
+      will-change: opacity;
     }
 
     body.dark::before {
       opacity: 0;
     }
 
-    /* Stars container */
     .stars-container {
       position: fixed;
       top: 0;
@@ -80,6 +79,7 @@
       z-index: -1;
       opacity: 0;
       transition: opacity 0.5s ease;
+      will-change: opacity;
     }
 
     body.dark .stars-container {
@@ -92,6 +92,7 @@
       border-radius: 50%;
       animation: twinkle var(--duration) ease-in-out infinite, moveLeft var(--move-duration) linear infinite;
       animation-delay: var(--delay), 0s;
+      will-change: transform, opacity;
     }
 
     @keyframes twinkle {
@@ -167,7 +168,7 @@
       justify-content: center;
       z-index: 1;
     }
-    
+
     .score-wrapper {
       width: 100%;
       max-width: 600px;
@@ -176,7 +177,7 @@
       justify-content: flex-start;
       box-sizing: border-box;
     }
-    
+
     .score-text {
       font-size: 20px;
       font-weight: bold;
@@ -193,11 +194,11 @@
       white-space: nowrap;
       margin-left: 0;
     }
-    
+
     body.dark .score-text {
       background-color: rgba(255,255,255,0.1);
     }
-    
+
     canvas {
       border: 8px solid var(--canvas-border);
       display: block;
@@ -209,12 +210,13 @@
       z-index: 1;
       border-radius: 4px;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      image-rendering: auto;
     }
 
     body.dark canvas {
       box-shadow: 0 4px 20px rgba(255, 255, 255, 0.05);
     }
-    
+
     @media (max-width: 620px) {
       canvas {
         width: calc(100vw - 20px);
@@ -309,7 +311,7 @@
       transform: translateY(0);
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     }
-    
+
     #gameOver button {
       padding: 15px 30px;
       font-size: 18px;
@@ -371,7 +373,7 @@
         min-height: 44px;
       }
     }
-    
+
     @media (max-width: 620px) {
       .score-wrapper {
         padding-left: 10px;
@@ -380,7 +382,6 @@
   </style>
 </head>
 <body>
-  <!-- Stars container for dark theme -->
   <div class="stars-container" id="starsContainer"></div>
 
   <div class="title-bar">
@@ -392,9 +393,9 @@
     <div class="score-wrapper">
       <div class="score-text">Счёт: <span id="score">0</span></div>
     </div>
-    
+
     <canvas id="gameCanvas" width="600" height="800"></canvas>
-    
+
     <div id="startScreen">
       <button id="startBtn">Начать игру</button>
     </div>
@@ -406,550 +407,511 @@
   </div>
 
   <script>
-    // Stars generation function
-    function createStars() {
-      const container = document.getElementById('starsContainer');
-      const numberOfStars = 150;
-      
-      // Clear existing stars
-      container.innerHTML = '';
-      
-      for (let i = 0; i < numberOfStars; i++) {
-        const star = document.createElement('div');
-        star.className = 'star';
-        
-        // Random size between 1-3px
-        const size = Math.random() * 2 + 1;
-        
-        // Random position - start from right side to move left
-        const x = Math.random() * 150; // Start from 0% to 150% to ensure smooth flow
-        const y = Math.random() * 100;
-        
-        // Random animation duration for twinkle (2-6 seconds)
-        const twinkleDuration = Math.random() * 4 + 2;
-        
-        // Random animation delay for twinkle (0-5 seconds)
-        const twinkleDelay = Math.random() * 5;
-        
-        // Random movement duration (60-120 seconds for very slow drift)
-        const moveDuration = Math.random() * 60 + 60;
-        
-        star.style.cssText = `
-          width: ${size}px;
-          height: ${size}px;
-          left: ${x}%;
-          top: ${y}%;
-          --duration: ${twinkleDuration}s;
-          --delay: ${twinkleDelay}s;
-          --move-duration: ${moveDuration}s;
-        `;
-        
-        container.appendChild(star);
-      }
-    }
+    (function() {
+      // Cache DOM elements
+      const starsContainer = document.getElementById('starsContainer');
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      const scoreElement = document.getElementById('score');
+      const gameOverElement = document.getElementById('gameOver');
+      const finalScoreElement = document.getElementById('finalScore');
+      const restartButton = document.getElementById('restartBtn');
+      const startScreen = document.getElementById('startScreen');
+      const startButton = document.getElementById('startBtn');
+      const themeToggleBtn = document.getElementById('themeToggleBtn');
 
-    // Audio elements for ball sounds
-    const ballSounds = [];
-    for (let i = 1; i <= 14; i++) {
-      const audio = new Audio(`sounds/Ball/${i}.mp3`);
-      audio.preload = 'auto';
-      ballSounds.push(audio);
-    }
-    
-    // Variable to store the last played sound index
-    let lastPlayedIndex = -1;
-    
-    // Function to play a random ball sound
-    function playBallSound() {
-      // Create a copy of the sounds array
-      const availableSounds = [...ballSounds];
-      
-      // If we have more than one sound, ensure we don't play the same sound twice in a row
-      let randomIndex;
-      if (availableSounds.length > 1) {
-        // Keep generating random indices until we get one different from the last played
-        do {
-          randomIndex = Math.floor(Math.random() * availableSounds.length);
-        } while (randomIndex === lastPlayedIndex && availableSounds.length > 1);
-      } else {
-        // If only one sound is available, just use it
-        randomIndex = 0;
-      }
-      
-      // Update the last played index
-      lastPlayedIndex = randomIndex;
-      
-      // Get the sound and play it
-      const sound = availableSounds[randomIndex];
-      
-      // Reset and play the sound
-      sound.currentTime = 0;
-      sound.play().catch(e => console.log('Audio play error:', e));
-    }
-    
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const scoreElement = document.getElementById('score');
-    const gameOverElement = document.getElementById('gameOver');
-    const finalScoreElement = document.getElementById('finalScore');
-    const restartButton = document.getElementById('restartBtn');
-    const startScreen = document.getElementById('startScreen');
-    const startButton = document.getElementById('startBtn');
+      // Constants
+      const baseCanvasWidth = 600;
+      const baseCanvasHeight = 800;
+      const ballSize = 16;
+      const paddleWidth = 140;
+      const paddleHeight = 16;
+      const cubeSize = 32;
+      const maxCubes = 10;
+      const minPaddleWidth = cubeSize;
+      const speedIncrement = 0.4;
+      const minDistanceBetweenCubes = cubeSize * 2;
 
-    const baseCanvasWidth = 600;
-    const baseCanvasHeight = 800;
-    const ballSize = 16;
-    const paddleWidth = 140;
-    const paddleHeight = 16;
-    const cubeSize = 32;
-    const maxCubes = 10;
-    const minPaddleWidth = cubeSize;
-    const speedIncrement = 0.4;
-    const minDistanceBetweenCubes = cubeSize * 2;
+      // State
+      let score = 0;
+      let gameActive = false;
+      let isDarkTheme = false;
 
-    let score = 0;
-    let gameActive = false;
-    
-    let ball = {
-      x: baseCanvasWidth / 2,
-      y: baseCanvasHeight / 2,
-      dx: 3,
-      dy: 3,
-      radius: ballSize / 2
-    };
+      let ball = {
+        x: baseCanvasWidth / 2,
+        y: baseCanvasHeight / 2,
+        dx: 3,
+        dy: 3,
+        radius: ballSize / 2
+      };
 
-    let playerPaddle = {
-      x: baseCanvasWidth / 2 - paddleWidth / 2,
-      y: baseCanvasHeight - paddleHeight - 10,
-      width: paddleWidth,
-      height: paddleHeight
-    };
+      let playerPaddle = {
+        x: baseCanvasWidth / 2 - paddleWidth / 2,
+        y: baseCanvasHeight - paddleHeight - 10,
+        width: paddleWidth,
+        height: paddleHeight
+      };
 
-    let cubes = [];
+      let cubes = [];
 
-    // Canvas texture patterns
-    let gridPattern = null;
-    let dotPattern = null;
+      // Audio - lazy load and reuse
+      const ballSounds = [];
+      let lastPlayedIndex = -1;
+      let soundsLoaded = false;
 
-    function createCanvasPatterns() {
-      // Create grid pattern for light theme
-      const gridCanvas = document.createElement('canvas');
-      gridCanvas.width = 40;
-      gridCanvas.height = 40;
-      const gridCtx = gridCanvas.getContext('2d');
-      
-      gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
-      gridCtx.lineWidth = 1;
-      gridCtx.beginPath();
-      gridCtx.moveTo(0, 0);
-      gridCtx.lineTo(40, 0);
-      gridCtx.lineTo(40, 40);
-      gridCtx.lineTo(0, 40);
-      gridCtx.closePath();
-      gridCtx.stroke();
-      
-      // Add subtle diagonal lines
-      gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.02)';
-      gridCtx.beginPath();
-      gridCtx.moveTo(0, 0);
-      gridCtx.lineTo(40, 40);
-      gridCtx.moveTo(40, 0);
-      gridCtx.lineTo(0, 40);
-      gridCtx.stroke();
-
-      gridPattern = ctx.createPattern(gridCanvas, 'repeat');
-
-      // Create dot pattern for subtle texture
-      const dotCanvas = document.createElement('canvas');
-      dotCanvas.width = 20;
-      dotCanvas.height = 20;
-      const dotCtx = dotCanvas.getContext('2d');
-      
-      dotCtx.fillStyle = 'rgba(0, 0, 0, 0.03)';
-      dotCtx.beginPath();
-      dotCtx.arc(10, 10, 1, 0, Math.PI * 2);
-      dotCtx.fill();
-
-      dotPattern = ctx.createPattern(dotCanvas, 'repeat');
-    }
-
-    function resetGame() {
-      score = 0;
-      gameActive = false;
-      scoreElement.textContent = score;
-      gameOverElement.style.display = 'none';
-      startScreen.style.display = 'block';
-      cubes = [];
-
-      playerPaddle.width = paddleWidth;
-      playerPaddle.x = baseCanvasWidth / 2 - playerPaddle.width / 2;
-
-      ball.x = baseCanvasWidth / 2;
-      ball.y = baseCanvasHeight / 2;
-      ball.dy = Math.random() > 0.5 ? 3 : -3;
-      ball.dx = Math.random() > 0.5 ? 3 : -3;
-      if (Math.abs(ball.dx) < 2) ball.dx = ball.dx > 0 ? 3 : -3;
-      if (Math.abs(ball.dy) < 2) ball.dy = ball.dy > 0 ? 3 : -3;
-    }
-
-    function startGame() {
-      gameActive = true;
-      startScreen.style.display = 'none';
-    }
-
-    function isOverlappingWithAnyCube(x, y, size, cubesList) {
-      const newCubeCenterX = x + size / 2;
-      const newCubeCenterY = y + size / 2;
-      
-      for (let cube of cubesList) {
-        const existingCenterX = cube.x + cube.size / 2;
-        const existingCenterY = cube.y + cube.size / 2;
-        const dx = newCubeCenterX - existingCenterX;
-        const dy = newCubeCenterY - existingCenterY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < minDistanceBetweenCubes) {
-          return true;
+      function loadSounds() {
+        if (soundsLoaded) return;
+        for (let i = 1; i <= 14; i++) {
+          const audio = new Audio(`sounds/Ball/${i}.mp3`);
+          audio.preload = 'auto';
+          audio.volume = 0.7;
+          ballSounds.push(audio);
         }
+        soundsLoaded = true;
       }
-      return false;
-    }
 
-    function createCube() {
-      const margin = cubeSize;
-      const maxX = baseCanvasWidth - cubeSize - margin;
-      const minX = margin;
-      const maxY = baseCanvasHeight - cubeSize - margin;
-      const minY = margin;
-      const maxAttempts = 500;
-      let attempts = 0;
-      
-      while (attempts < maxAttempts) {
-        attempts++;
+      function playBallSound() {
+        if (!soundsLoaded || ballSounds.length === 0) return;
         
-        let x = minX + Math.random() * (maxX - minX);
-        let y = minY + Math.random() * (maxY - minY);
+        let randomIndex;
+        if (ballSounds.length > 1) {
+          do {
+            randomIndex = Math.floor(Math.random() * ballSounds.length);
+          } while (randomIndex === lastPlayedIndex && ballSounds.length > 1);
+        } else {
+          randomIndex = 0;
+        }
         
-        if (!isOverlappingWithAnyCube(x, y, cubeSize, cubes)) {
-          const newCube = {
-            x: x,
-            y: y,
-            size: cubeSize
-          };
-          
-          if (cubes.length >= maxCubes) {
-            cubes.shift();
+        lastPlayedIndex = randomIndex;
+        const sound = ballSounds[randomIndex];
+        
+        try {
+          sound.currentTime = 0;
+          const playPromise = sound.play();
+          if (playPromise) {
+            playPromise.catch(() => {});
           }
-          
-          cubes.push(newCube);
-          return;
-        }
+        } catch (e) {}
       }
-      
-      for (let y = margin; y <= maxY; y += minDistanceBetweenCubes) {
-        for (let x = margin; x <= maxX; x += minDistanceBetweenCubes) {
+
+      // Canvas patterns
+      let gridPattern = null;
+      let dotPattern = null;
+
+      function createCanvasPatterns() {
+        const gridCanvas = document.createElement('canvas');
+        gridCanvas.width = 40;
+        gridCanvas.height = 40;
+        const gridCtx = gridCanvas.getContext('2d');
+        
+        gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
+        gridCtx.lineWidth = 1;
+        gridCtx.strokeRect(0, 0, 40, 40);
+        
+        gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.02)';
+        gridCtx.beginPath();
+        gridCtx.moveTo(0, 0);
+        gridCtx.lineTo(40, 40);
+        gridCtx.moveTo(40, 0);
+        gridCtx.lineTo(0, 40);
+        gridCtx.stroke();
+
+        gridPattern = ctx.createPattern(gridCanvas, 'repeat');
+
+        const dotCanvas = document.createElement('canvas');
+        dotCanvas.width = 20;
+        dotCanvas.height = 20;
+        const dotCtx = dotCanvas.getContext('2d');
+        
+        dotCtx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+        dotCtx.beginPath();
+        dotCtx.arc(10, 10, 1, 0, Math.PI * 2);
+        dotCtx.fill();
+
+        dotPattern = ctx.createPattern(dotCanvas, 'repeat');
+      }
+
+      function createStars() {
+        const fragment = document.createDocumentFragment();
+        const numberOfStars = 100;
+        
+        starsContainer.innerHTML = '';
+        
+        for (let i = 0; i < numberOfStars; i++) {
+          const star = document.createElement('div');
+          star.className = 'star';
+          
+          const size = Math.random() * 2 + 1;
+          const x = Math.random() * 150;
+          const y = Math.random() * 100;
+          const twinkleDuration = Math.random() * 4 + 2;
+          const twinkleDelay = Math.random() * 5;
+          const moveDuration = Math.random() * 60 + 60;
+          
+          star.style.cssText = `
+            width: ${size}px;
+            height: ${size}px;
+            left: ${x}%;
+            top: ${y}%;
+            --duration: ${twinkleDuration}s;
+            --delay: ${twinkleDelay}s;
+            --move-duration: ${moveDuration}s;
+          `;
+          
+          fragment.appendChild(star);
+        }
+        
+        starsContainer.appendChild(fragment);
+      }
+
+      function resetGame() {
+        score = 0;
+        gameActive = false;
+        scoreElement.textContent = '0';
+        gameOverElement.style.display = 'none';
+        startScreen.style.display = 'block';
+        cubes = [];
+
+        playerPaddle.width = paddleWidth;
+        playerPaddle.x = baseCanvasWidth / 2 - playerPaddle.width / 2;
+
+        ball.x = baseCanvasWidth / 2;
+        ball.y = baseCanvasHeight / 2;
+        ball.dy = Math.random() > 0.5 ? 3 : -3;
+        ball.dx = Math.random() > 0.5 ? 3 : -3;
+        if (Math.abs(ball.dx) < 2) ball.dx = ball.dx > 0 ? 3 : -3;
+        if (Math.abs(ball.dy) < 2) ball.dy = ball.dy > 0 ? 3 : -3;
+      }
+
+      function startGame() {
+        gameActive = true;
+        startScreen.style.display = 'none';
+        loadSounds();
+      }
+
+      function isOverlappingWithAnyCube(x, y, size, cubesList) {
+        const newCubeCenterX = x + size / 2;
+        const newCubeCenterY = y + size / 2;
+        
+        for (let i = 0, len = cubesList.length; i < len; i++) {
+          const cube = cubesList[i];
+          const existingCenterX = cube.x + cube.size / 2;
+          const existingCenterY = cube.y + cube.size / 2;
+          const dx = newCubeCenterX - existingCenterX;
+          const dy = newCubeCenterY - existingCenterY;
+          if (dx * dx + dy * dy < minDistanceBetweenCubes * minDistanceBetweenCubes) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function createCube() {
+        const margin = cubeSize;
+        const maxX = baseCanvasWidth - cubeSize - margin;
+        const minX = margin;
+        const maxY = baseCanvasHeight - cubeSize - margin;
+        const minY = margin;
+        const maxAttempts = 200;
+        let attempts = 0;
+        
+        while (attempts < maxAttempts) {
+          attempts++;
+          
+          let x = minX + Math.random() * (maxX - minX);
+          let y = minY + Math.random() * (maxY - minY);
+          
           if (!isOverlappingWithAnyCube(x, y, cubeSize, cubes)) {
-            const newCube = {
-              x: x,
-              y: y,
-              size: cubeSize
-            };
+            // Удаляем старый куб только если достигнут лимит
             if (cubes.length >= maxCubes) {
               cubes.shift();
             }
-            cubes.push(newCube);
+            cubes.push({ x, y, size: cubeSize });
             return;
           }
         }
-      }
-      
-      let x = minX + Math.random() * (baseCanvasWidth - cubeSize - 2 * margin);
-      let y = minY + Math.random() * (baseCanvasHeight - cubeSize - 2 * margin);
-      const newCube = {
-        x: x,
-        y: y,
-        size: cubeSize
-      };
-      if (cubes.length >= maxCubes) {
-        cubes.shift();
-      }
-      cubes.push(newCube);
-    }
-
-    function checkPaddleCollision() {
-      if (
-        ball.y + ball.radius >= playerPaddle.y &&
-        ball.y - ball.radius <= playerPaddle.y + playerPaddle.height &&
-        ball.x + ball.radius >= playerPaddle.x &&
-        ball.x - ball.radius <= playerPaddle.x + playerPaddle.width
-      ) {
-        ball.dy = -Math.abs(ball.dy);
-        score++;
-        scoreElement.textContent = score;
-        playBallSound();
         
-        if (score >= 10) {
-          createCube();
+        // Fallback: если не нашли место после всех попыток, всё равно добавляем
+        if (cubes.length >= maxCubes) {
+          cubes.shift();
         }
-        
-        if (score >= 20 && playerPaddle.width > minPaddleWidth) {
-          const newWidth = playerPaddle.width * 0.95;
+        cubes.push({
+          x: minX + Math.random() * (baseCanvasWidth - cubeSize - 2 * margin),
+          y: minY + Math.random() * (baseCanvasHeight - cubeSize - 2 * margin),
+          size: cubeSize
+        });
+      }
+
+      function checkPaddleCollision() {
+        if (
+          ball.y + ball.radius >= playerPaddle.y &&
+          ball.y - ball.radius <= playerPaddle.y + playerPaddle.height &&
+          ball.x + ball.radius >= playerPaddle.x &&
+          ball.x - ball.radius <= playerPaddle.x + playerPaddle.width
+        ) {
+          ball.dy = -Math.abs(ball.dy);
+          score++;
+          scoreElement.textContent = score;
+          playBallSound();
           
-          if (newWidth <= minPaddleWidth) {
-            playerPaddle.width = minPaddleWidth;
-            playerPaddle.x = ball.x - minPaddleWidth / 2;
-          } else {
+          // Создаем куб при счете >= 10 (каждый раз при отскоке)
+          if (score >= 10) {
+            createCube();
+          }
+          
+          if (score >= 20 && playerPaddle.width > minPaddleWidth) {
+            const newWidth = Math.max(minPaddleWidth, playerPaddle.width * 0.95);
             const widthDiff = playerPaddle.width - newWidth;
             playerPaddle.x += widthDiff / 2;
             playerPaddle.width = newWidth;
           }
         }
       }
-    }
 
-    function checkCubeCollision() {
-      for (let i = 0; i < cubes.length; i++) {
-        const cube = cubes[i];
-        
-        if (
-          ball.x + ball.radius >= cube.x &&
-          ball.x - ball.radius <= cube.x + cube.size &&
-          ball.y + ball.radius >= cube.y &&
-          ball.y - ball.radius <= cube.y + cube.size
-        ) {
-          const ballCenterX = ball.x;
-          const ballCenterY = ball.y;
-          const cubeCenterX = cube.x + cube.size / 2;
-          const cubeCenterY = cube.y + cube.size / 2;
+      function checkCubeCollision() {
+        for (let i = 0; i < cubes.length; i++) {
+          const cube = cubes[i];
           
-          const dx = ballCenterX - cubeCenterX;
-          const dy = ballCenterY - cubeCenterY;
-          
-          if (Math.abs(dx) > Math.abs(dy)) {
-            ball.dx = -ball.dx;
-          } else {
-            ball.dy = -ball.dy;
+          if (
+            ball.x + ball.radius > cube.x &&
+            ball.x - ball.radius < cube.x + cube.size &&
+            ball.y + ball.radius > cube.y &&
+            ball.y - ball.radius < cube.y + cube.size
+          ) {
+            const ballCenterX = ball.x;
+            const ballCenterY = ball.y;
+            const cubeCenterX = cube.x + cube.size / 2;
+            const cubeCenterY = cube.y + cube.size / 2;
+            
+            const dx = ballCenterX - cubeCenterX;
+            const dy = ballCenterY - cubeCenterY;
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+              ball.dx = Math.abs(ball.dx) * (dx > 0 ? 1 : -1);
+            } else {
+              ball.dy = Math.abs(ball.dy) * (dy > 0 ? 1 : -1);
+            }
+            
+            playBallSound();
+            break;
           }
-          
+        }
+      }
+
+      function checkGameOver() {
+        if (ball.y + ball.radius >= baseCanvasHeight) {
+          gameActive = false;
+          finalScoreElement.textContent = score;
+          gameOverElement.style.display = 'block';
+        }
+      }
+
+      function updateBall() {
+        if (!gameActive) return;
+        
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+
+        if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= baseCanvasWidth) {
+          ball.dx = -ball.dx;
           playBallSound();
-          break;
+        }
+
+        if (ball.y - ball.radius <= 0) {
+          ball.dy = -ball.dy;
+          playBallSound();
+          if (ball.dy < 0) {
+            ball.dy -= speedIncrement;
+          } else {
+            ball.dy += speedIncrement;
+          }
         }
       }
-    }
 
-    function checkGameOver() {
-      if (ball.y + ball.radius >= baseCanvasHeight) {
-        gameOver();
-      }
-    }
-
-    function gameOver() {
-      gameActive = false;
-      finalScoreElement.textContent = score;
-      gameOverElement.style.display = 'block';
-    }
-
-    function updateBall() {
-      if (!gameActive) return;
-      
-      ball.x += ball.dx;
-      ball.y += ball.dy;
-
-      if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= baseCanvasWidth) {
-        ball.dx = -ball.dx;
-        playBallSound();
-      }
-
-      if (ball.y - ball.radius <= 0) {
-        ball.dy = -ball.dy;
-        playBallSound();
-        if (ball.dy < 0) {
-          ball.dy -= speedIncrement;
-        } else {
-          ball.dy += speedIncrement;
+      function updatePaddlePosition(clientX, clientY) {
+        if (!gameActive) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const relativeX = (clientX - rect.left) / rect.width;
+        const gameX = relativeX * baseCanvasWidth;
+        
+        playerPaddle.x = gameX - playerPaddle.width / 2;
+        
+        if (playerPaddle.x < 0) playerPaddle.x = 0;
+        if (playerPaddle.x + playerPaddle.width > baseCanvasWidth) {
+          playerPaddle.x = baseCanvasWidth - playerPaddle.width;
         }
       }
-    }
 
-    function getCanvasScale() {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        scaleX: rect.width / baseCanvasWidth,
-        scaleY: rect.height / baseCanvasHeight
-      };
-    }
+      // Throttled mouse move
+      let lastMoveTime = 0;
+      const MOVE_THROTTLE = 16;
 
-    function screenToGameCoordinates(clientX, clientY) {
-      const rect = canvas.getBoundingClientRect();
-      const relativeX = (clientX - rect.left) / rect.width;
-      const relativeY = (clientY - rect.top) / rect.height;
-      
-      return {
-        x: relativeX * baseCanvasWidth,
-        y: relativeY * baseCanvasHeight
-      };
-    }
+      document.addEventListener('mousemove', (e) => {
+        const now = performance.now();
+        if (now - lastMoveTime < MOVE_THROTTLE) return;
+        lastMoveTime = now;
+        updatePaddlePosition(e.clientX, e.clientY);
+      }, { passive: true });
 
-    function updatePaddlePosition(clientX, clientY) {
-      if (!gameActive) return;
-      
-      const gameCoords = screenToGameCoordinates(clientX, clientY);
-      
-      playerPaddle.x = gameCoords.x - playerPaddle.width / 2;
-      
-      if (playerPaddle.x < 0) playerPaddle.x = 0;
-      if (playerPaddle.x + playerPaddle.width > baseCanvasWidth) playerPaddle.x = baseCanvasWidth - playerPaddle.width;
-    }
-
-    document.addEventListener('mousemove', (e) => {
-      updatePaddlePosition(e.clientX, e.clientY);
-    });
-
-    document.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    });
-
-    canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      updatePaddlePosition(e.touches[0].clientX, e.touches[0].clientY);
-    });
-
-    canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      updatePaddlePosition(e.touches[0].clientX, e.touches[0].clientY);
-    });
-
-    function getGameElementsColor() {
-      const bodyStyles = getComputedStyle(document.body);
-      return bodyStyles.getPropertyValue('--game-elements').trim() || '#000000';
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, baseCanvasWidth, baseCanvasHeight);
-      
-      const canvasBg = getComputedStyle(canvas).backgroundColor;
-      ctx.fillStyle = canvasBg;
-      ctx.fillRect(0, 0, baseCanvasWidth, baseCanvasHeight);
-      
-      // Draw patterns for light theme
-      const isDark = document.body.classList.contains('dark');
-      if (!isDark) {
-        if (gridPattern) {
-          ctx.fillStyle = gridPattern;
-          ctx.fillRect(0, 0, baseCanvasWidth, baseCanvasHeight);
-        }
-        if (dotPattern) {
-          ctx.fillStyle = dotPattern;
-          ctx.fillRect(0, 0, baseCanvasWidth, baseCanvasHeight);
-        }
-      }
-      
-      let elementsColor = getGameElementsColor();
-      ctx.fillStyle = elementsColor;
-      
-      // Draw paddle with slight shadow for depth
-      ctx.shadowColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetY = 2;
-      ctx.fillRect(playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height);
-      
-      // Reset shadow for ball
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-      
-      // Draw ball with glow effect
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.closePath();
-      
-      // Add subtle glow to ball
-      ctx.shadowColor = isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)';
-      ctx.shadowBlur = 6;
-      ctx.fill();
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      
-      // Draw cubes with slight shadow
-      ctx.shadowColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      ctx.shadowBlur = 3;
-      ctx.shadowOffsetY = 1;
-      cubes.forEach(cube => {
-        ctx.fillRect(cube.x, cube.y, cube.size, cube.size);
+      document.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
       });
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-    }
 
-    function gameLoop() {
-      updateBall();
-      if (gameActive) {
-        checkPaddleCollision();
-        checkCubeCollision();
-        checkGameOver();
+      canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (e.touches.length > 0) {
+          updatePaddlePosition(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length > 0) {
+          updatePaddlePosition(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: false });
+
+      // Cached color value
+      let cachedElementsColor = '#000000';
+      let colorCacheTime = 0;
+
+      function getGameElementsColor() {
+        const now = performance.now();
+        if (now - colorCacheTime < 200) {
+          return cachedElementsColor;
+        }
+        colorCacheTime = now;
+        const bodyStyles = getComputedStyle(document.body);
+        cachedElementsColor = bodyStyles.getPropertyValue('--game-elements').trim() || '#000000';
+        return cachedElementsColor;
       }
-      draw();
-      requestAnimationFrame(gameLoop);
-    }
 
-    restartButton.addEventListener('click', () => {
-      resetGame();
-    });
-
-    startButton.addEventListener('click', () => {
-      startGame();
-    });
-
-    const themeToggleBtn = document.getElementById('themeToggleBtn');
-    
-    function setTheme(theme) {
-      if (theme === 'dark') {
-        document.body.classList.add('dark');
-        localStorage.setItem('pongTheme', 'dark');
-        themeToggleBtn.textContent = '☀️';
-      } else {
-        document.body.classList.remove('dark');
-        localStorage.setItem('pongTheme', 'light');
-        themeToggleBtn.textContent = '🌙';
+      function draw() {
+        ctx.clearRect(0, 0, baseCanvasWidth, baseCanvasHeight);
+        
+        const canvasBg = isDarkTheme ? '#1e1e1e' : '#ffffff';
+        ctx.fillStyle = canvasBg;
+        ctx.fillRect(0, 0, baseCanvasWidth, baseCanvasHeight);
+        
+        if (!isDarkTheme) {
+          if (gridPattern) {
+            ctx.fillStyle = gridPattern;
+            ctx.fillRect(0, 0, baseCanvasWidth, baseCanvasHeight);
+          }
+          if (dotPattern) {
+            ctx.fillStyle = dotPattern;
+            ctx.fillRect(0, 0, baseCanvasWidth, baseCanvasHeight);
+          }
+        }
+        
+        const elementsColor = getGameElementsColor();
+        
+        // Paddle
+        ctx.fillStyle = elementsColor;
+        ctx.shadowColor = isDarkTheme ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 2;
+        ctx.fillRect(playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height);
+        
+        // Ball
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = elementsColor;
+        ctx.fill();
+        
+        ctx.shadowColor = isDarkTheme ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)';
+        ctx.shadowBlur = 6;
+        ctx.fill();
+        
+        // Cubes
+        ctx.shadowColor = isDarkTheme ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetY = 1;
+        ctx.fillStyle = elementsColor;
+        
+        for (let i = 0; i < cubes.length; i++) {
+          const cube = cubes[i];
+          ctx.fillRect(cube.x, cube.y, cube.size, cube.size);
+        }
+        
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
       }
-      const canvasBg = getComputedStyle(canvas).backgroundColor;
-      ctx.fillStyle = canvasBg;
-      ctx.fillRect(0, 0, baseCanvasWidth, baseCanvasHeight);
-      draw();
-    }
-    
-    function toggleTheme() {
-      const isDark = document.body.classList.contains('dark');
-      if (isDark) {
+
+      let lastFrameTime = 0;
+      const FRAME_RATE = 60;
+      const FRAME_INTERVAL = 1000 / FRAME_RATE;
+
+      function gameLoop(timestamp) {
+        const elapsed = timestamp - lastFrameTime;
+        
+        if (elapsed >= FRAME_INTERVAL) {
+          lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
+          
+          if (gameActive) {
+            updateBall();
+            checkPaddleCollision();
+            checkCubeCollision();
+            checkGameOver();
+          }
+          draw();
+        }
+        
+        requestAnimationFrame(gameLoop);
+      }
+
+      restartButton.addEventListener('click', resetGame);
+      startButton.addEventListener('click', startGame);
+
+      function setTheme(theme) {
+        if (theme === 'dark') {
+          document.body.classList.add('dark');
+          isDarkTheme = true;
+          localStorage.setItem('pongTheme', 'dark');
+          themeToggleBtn.textContent = '☀️';
+        } else {
+          document.body.classList.remove('dark');
+          isDarkTheme = false;
+          localStorage.setItem('pongTheme', 'light');
+          themeToggleBtn.textContent = '🌙';
+        }
+        colorCacheTime = 0;
+      }
+      
+      function toggleTheme() {
+        setTheme(isDarkTheme ? 'light' : 'dark');
+      }
+      
+      const savedTheme = localStorage.getItem('pongTheme');
+      if (savedTheme === 'dark') {
+        setTheme('dark');
+      } else if (savedTheme === 'light') {
         setTheme('light');
       } else {
-        setTheme('dark');
+        setTheme('light');
       }
-    }
-    
-    const savedTheme = localStorage.getItem('pongTheme');
-    if (savedTheme === 'dark') {
-      setTheme('dark');
-    } else if (savedTheme === 'light') {
-      setTheme('light');
-    } else {
-      setTheme('light');
-    }
-    
-    themeToggleBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      toggleTheme();
-    });
-    
-    // Create stars on page load
-    createStars();
-    
-    // Initialize canvas patterns after canvas is ready
-    createCanvasPatterns();
-    
-    gameLoop();
-    resetGame();
+      
+      themeToggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleTheme();
+      });
+      
+      createStars();
+      createCanvasPatterns();
+      
+      requestAnimationFrame((timestamp) => {
+        lastFrameTime = timestamp;
+        gameLoop(timestamp);
+      });
+      
+      resetGame();
+    })();
   </script>
 </body>
 </html>
